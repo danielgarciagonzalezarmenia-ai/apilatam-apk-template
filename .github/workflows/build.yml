@@ -15,6 +15,7 @@ jobs:
       BUILD_APP_NAME: ${{ github.event.client_payload.name }}
       BUILD_APP_URL: ${{ github.event.client_payload.webUrl }}
       ICON_URL: ${{ github.event.client_payload.iconUrl }}
+      ICON_BASE64: ${{ github.event.client_payload.iconBase64 }}
       API_URL: ${{ vars.API_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +29,9 @@ jobs:
         run: |
           mkdir -p app/src/main/res/drawable-nodpi
           python3 -c "import xml.sax.saxutils as su,sys;n=su.escape(sys.argv[1]);open('app/src/main/res/values/strings.xml','w').write('<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><string name=\"app_name\" translatable=\"false\">'+n+'</string></resources>')" "$BUILD_APP_NAME"
-          if [ -n "$ICON_URL" ] && [ "$ICON_URL" != "undefined" ]; then
+          if [ -n "$ICON_BASE64" ] && [ "$ICON_BASE64" != "undefined" ]; then
+            echo "$ICON_BASE64" | base64 -d > app/src/main/res/drawable-nodpi/app_icon.png
+          elif [ -n "$ICON_URL" ] && [ "$ICON_URL" != "undefined" ]; then
             curl -fsSL -o app/src/main/res/drawable-nodpi/app_icon.png "$ICON_URL" || true
           fi
 
