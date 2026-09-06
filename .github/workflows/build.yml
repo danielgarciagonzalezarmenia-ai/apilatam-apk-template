@@ -1,0 +1,102 @@
+name: Build APK
+
+on:
+  repository_dispatch:
+    types: [build-app]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_APP_ID: ${{ github.event.client_payload.appId }}
+      BUILD_APP_NAME: ${{ github.event.client_payload.name }}
+      BUILD_APP_URL: ${{ github.event.client_payload.webUrl }}
+      ICON_URL: ${{ github.event.client_payload.iconUrl }}
+      API_URL: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Package label + icon
+        run: |
+          mkdir -p app/src/main/res/drawable-nodpi
+          python3 -c "import xml.sax.saxutils as su,sys;n=su.escape(sys.argv[1]);open('app/src/main/res/values/strings.xml','w').write('<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><string name=\"app_name\" translatable=\"false\">'+n+'</string></resources>')" "$BUILD_APP_NAME"
+          if [ -n "$ICON_URL" ] && [ "$ICON_URL" != "undefined" ]; then
+            curl -fsSL -o app/src/main/res/drawable-nodpi/app_icon.png "$ICON_URL" || true
+          fi
+
+      - name: Setup Gradle
+        run: |
+          curl -sSLo /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-8.5-bin.zip"
+          unzip -q /tmp/gradle.zip -d /tmp
+          echo "/tmp/gradle-8.5/bin" >> $GITHUB_PATH
+
+      - name: Signing (opcional)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > keystore.jks
+            echo "KEYSTORE_B64_PRESENT=1" >> $GITHUB_ENV
+          fi
+
+      - name: Build APK
+        env:
+          KEYSTORE_B64_PRESENT: ${{ env.KEYSTORE_B64_PRESENT }}
+          KEYSTORE_FILE: /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/keystore.jks
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          if [ "$KEYSTORE_B64_PRESENT" = "1" ]; then
+            gradle --no-daemon assembleRelease
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+      - name: Collect
+        id: collect
+        run: |
+          SRC="app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then SRC="app/build/outputs/apk/release/app-release.apk"; fi
+          OUT="${BUILD_APP_ID//[^a-zA-Z0-9._-]/_}.apk"
+          cp "$SRC" "$OUT"
+          echo "TAG=apk-${OUT%.apk}-${{ github.run_id }}" >> $GITHUB_ENV
+          echo "OUT_APK=$OUT" >> $GITHUB_ENV
+
+      - uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: ${{ env.TAG }}
+          files: ${{ env.OUT_APK }}
+          fail_on_unmatched_files: true
+
+      - name: Notificar exito
+        if: success()
+        env:
+          BUILD_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          API="${API_URL:-https://apilatam.workers.dev}"
+          apkUrl="https://github.com/${{ github.repository }}/releases/download/${TAG}/${OUT_APK}"
+          curl -sS -X POST "$API/api/build-status" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${BUILD_TOKEN}" \
+            -d "{\"appId\":\"${BUILD_APP_ID}\",\"status\":\"ready\",\"apkUrl\":\"${apkUrl}\"}" || true
+
+      - name: Notificar falla
+        if: failure()
+        env:
+          BUILD_TOKEN: ${{ secrets.BUILD_TOKEN }}
+        run: |
+          API="${API_URL:-https://apilatam.workers.dev}"
+          curl -sS -X POST "$API/api/build-status" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${BUILD_TOKEN}" \
+            -d "{\"appId\":\"${BUILD_APP_ID}\",\"status\":\"failed\",\"apkUrl\":\"\"}" || true
