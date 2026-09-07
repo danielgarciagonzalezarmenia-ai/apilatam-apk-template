@@ -6,7 +6,7 @@ plugins {
 val appId = System.getenv("BUILD_APP_ID") ?: "demo"
 val appName = System.getenv("BUILD_APP_NAME") ?: "Mi App"
 val appUrl = System.getenv("BUILD_APP_URL") ?: "https://example.com"
-val apiUrl = System.getenv("BUILD_API_URL") ?: "https://apilatam.workers.dev"
+val apiUrl = System.getenv("API_URL") ?: System.getenv("BUILD_API_URL") ?: "https://apilatam.mundofutbolcol.workers.dev"
 
 android {
   namespace = "com.apilatam.wrap"

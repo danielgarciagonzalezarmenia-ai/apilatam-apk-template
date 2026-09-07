@@ -1,12 +1,17 @@
 package com.apilatam.wrap
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.FirebaseMessaging
 import java.net.HttpURLConnection
 import java.net.URL
@@ -21,8 +26,32 @@ class MainActivity : AppCompatActivity() {
     web = findViewById(R.id.web)
     setupWeb()
     web.loadUrl(BuildConfig.APP_URL)
+    initFirebase()
+    requestNotificationPermission()
     registerToken()
     intent?.extras?.getString("url")?.let { redirect(it) }
+  }
+
+  private fun initFirebase() {
+    try {
+      if (FirebaseApp.getApps(this).isEmpty()) {
+        FirebaseApp.initializeApp(this, FirebaseOptions.Builder()
+          .setApplicationId("1:352238980841:android:a1b2c3d4e5f6a7b8")
+          .setApiKey("AIzaSyA4lFjAcn7ebAZF9SkVfpm1RPYnThN8roA")
+          .setProjectId("appforge-20549")
+          .setGcmSenderId("352238980841")
+          .setStorageBucket("appforge-20549.appspot.com")
+          .build())
+      }
+    } catch (_: Exception) {
+    }
+  }
+
+  private fun requestNotificationPermission() {
+    if (Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+    }
   }
 
   override fun onNewIntent(intent: Intent) {
