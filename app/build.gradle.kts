@@ -12,12 +12,22 @@ val buildSeed: String = buildTs.takeLast(8).padStart(8, '0')
 val buildVersionCode: Int = buildSeed.toIntOrNull()?.takeIf { it > 1 } ?: 1
 val buildVersionName: String = if (buildVersionCode > 1) "1.0.$buildTs" else "1.0.0"
 
+// Id de paquete unico por app: evita que instalar dos apps distintas se trate como "actualizar".
+// El codigo (clases) vive bajo com.apilatam.wrap; solo el applicationId (identidad de instalacion) difiere.
+val pkgBase = appId.lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_').take(40)
+val pkgSeg = when {
+  pkgBase.isEmpty() -> "default"
+  pkgBase[0].isDigit() -> "app_$pkgBase"
+  else -> pkgBase
+}
+val appIdUnique = "com.apilatam.app.$pkgSeg"
+
 android {
   namespace = "com.apilatam.wrap"
   compileSdk = 34
 
   defaultConfig {
-    applicationId = "com.apilatam.wrap"
+    applicationId = appIdUnique
     minSdk = 23
     targetSdk = 34
     versionCode = buildVersionCode
