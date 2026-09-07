@@ -27,9 +27,26 @@ class MainActivity : AppCompatActivity() {
     setupWeb()
     web.loadUrl(BuildConfig.APP_URL)
     initFirebase()
-    requestNotificationPermission()
     registerToken()
     intent?.extras?.getString("url")?.let { redirect(it) }
+  }
+
+  private var permRequested = false
+
+  override fun onWindowFocusChanged(hasFocus: Boolean) {
+    super.onWindowFocusChanged(hasFocus)
+    if (hasFocus && !permRequested && Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      permRequested = true
+      requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+    }
+  }
+
+  override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    val granted = requestCode == 1001 && grantResults.isNotEmpty() &&
+      grantResults[0] == PackageManager.PERMISSION_GRANTED
+    postToWeb(if (granted) "perm-ok" else "perm-denied")
   }
 
   private fun initFirebase() {
@@ -93,13 +110,20 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun registerToken() {
+    postToWeb("iniciando")
     Thread {
       try {
         FirebaseMessaging.getInstance().token
           .addOnCompleteListener { t ->
-            if (t.isSuccessful) postToken(t.result)
+            if (t.isSuccessful) {
+              postToWeb("token-ok")
+              postToken(t.result)
+            } else {
+              postToWeb("token-err: " + (t.exception?.message ?: "desconocido"))
+            }
           }
-      } catch (_: Exception) {
+      } catch (e: Exception) {
+        postToWeb("fcm-excep: " + (e.message ?: e.toString()))
       }
     }.start()
   }
@@ -111,7 +135,7 @@ class MainActivity : AppCompatActivity() {
         .put("token", token)
         .put("platform", "android")
         .toString()
-      val url = URL("${BuildConfig.API_URL}/api/token")
+      val url = URL(BuildConfig.API_URL + "/api/token")
       val conn = (url.openConnection() as HttpURLConnection).apply {
         requestMethod = "POST"
         doOutput = true
@@ -121,8 +145,25 @@ class MainActivity : AppCompatActivity() {
         setRequestProperty("Accept", "application/json")
       }
       conn.outputStream.use { it.write(out.toByteArray()) }
+      val status = conn.responseCode
       conn.inputStream.use { it.close() }
-    } catch (_: Exception) {
+      if (status in 200..299) postToWeb("registrado") else postToWeb("registro-" + status)
+    } catch (e: Exception) {
+      postToWeb("registro-err: " + (e.message ?: ""))
     }
+  }
+
+  private fun postToWeb(msg: String) {
+    val safe = msg.replace("'", " ").replace("\\", " ").take(120)
+    Thread {
+      var i = 0
+      while (i < 10) {
+        runOnUiThread {
+          try { web.evaluateJavascript("try{window.__fcmStatus=window.__fcmStatus||function(){};window.__fcmStatus('$safe')}catch(e){}", null) } catch (_: Exception) {}
+        }
+        i++
+        try { Thread.sleep(2000) } catch (_: Exception) {}
+      }
+    }.start()
   }
 }
