@@ -6,9 +6,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -31,13 +36,19 @@ class MainActivity : AppCompatActivity() {
     intent?.extras?.getString("url")?.let { redirect(it) }
   }
 
-  private var permRequested = false
+  private var permAsked = false
 
-  override fun onWindowFocusChanged(hasFocus: Boolean) {
-    super.onWindowFocusChanged(hasFocus)
-    if (hasFocus && !permRequested && Build.VERSION.SDK_INT >= 33 &&
+  override fun onResume() {
+    super.onResume()
+    if (!permAsked) {
+      permAsked = true
+      Handler(Looper.getMainLooper()).postDelayed({ askNotifications() }, 700)
+    }
+  }
+
+  private fun askNotifications() {
+    if (Build.VERSION.SDK_INT >= 33 &&
         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-      permRequested = true
       requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
     }
   }
@@ -85,6 +96,16 @@ class MainActivity : AppCompatActivity() {
     s.useWideViewPort = true
     s.cacheMode = WebSettings.LOAD_DEFAULT
     web.webViewClient = object : WebViewClient() {
+      override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+        if (request.isForMainFrame) {
+          runOnUiThread {
+            try {
+              Toast.makeText(this@MainActivity, "No se pudo cargar la app: " + (error.description ?: "error de red"), Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {
+            }
+          }
+        }
+      }
       override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
         when {
           url.startsWith("tel:") || url.startsWith("mailto:") || url.startsWith("whatsapp:")
@@ -155,6 +176,12 @@ class MainActivity : AppCompatActivity() {
 
   private fun postToWeb(msg: String) {
     val safe = msg.replace("'", " ").replace("\\", " ").take(120)
+    runOnUiThread {
+      try {
+        Toast.makeText(this, "FCM: $safe", Toast.LENGTH_LONG).show()
+      } catch (_: Exception) {
+      }
+    }
     Thread {
       var i = 0
       while (i < 10) {
