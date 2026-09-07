@@ -7,6 +7,10 @@ val appId = System.getenv("BUILD_APP_ID") ?: "demo"
 val appName = System.getenv("BUILD_APP_NAME") ?: "Mi App"
 val appUrl = System.getenv("BUILD_APP_URL") ?: "https://example.com"
 val apiUrl = System.getenv("API_URL") ?: System.getenv("BUILD_API_URL") ?: "https://apilatam.mundofutbolcol.workers.dev"
+val buildTs = System.getenv("BUILD_TS")?.trim().orEmpty().takeWhile { it.isDigit() }
+val buildSeed: String = buildTs.takeLast(8).padStart(8, '0')
+val buildVersionCode: Int = buildSeed.toIntOrNull()?.takeIf { it > 1 } ?: 1
+val buildVersionName: String = if (buildVersionCode > 1) "1.0.$buildTs" else "1.0.0"
 
 android {
   namespace = "com.apilatam.wrap"
@@ -16,8 +20,8 @@ android {
     applicationId = "com.apilatam.wrap"
     minSdk = 23
     targetSdk = 34
-    versionCode = 1
-    versionName = "1.0.0"
+    versionCode = buildVersionCode
+    versionName = buildVersionName
     buildConfigField("String", "APP_ID", "\"${appId.replace("\"", "\\\"")}\"")
     buildConfigField("String", "APP_NAME", "\"${appName.replace("\"", "\\\"")}\"")
     buildConfigField("String", "APP_URL", "\"$appUrl\"")

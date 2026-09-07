@@ -17,6 +17,7 @@ jobs:
       ICON_URL: ${{ github.event.client_payload.iconUrl }}
       ICON_BASE64: ${{ github.event.client_payload.iconBase64 }}
       API_URL: ${{ vars.API_URL || 'https://apilatam.mundofutbolcol.workers.dev' }}
+      BUILD_TS: ${{ github.run_id }}
     steps:
       - uses: actions/checkout@v4
 
@@ -69,9 +70,10 @@ jobs:
         run: |
           SRC="app/build/outputs/apk/debug/app-debug.apk"
           if [ -f "app/build/outputs/apk/release/app-release.apk" ]; then SRC="app/build/outputs/apk/release/app-release.apk"; fi
-          OUT="${BUILD_APP_ID//[^a-zA-Z0-9._-]/_}.apk"
+          BASE="${BUILD_APP_ID//[^a-zA-Z0-9._-]/_}"
+          OUT="${BASE}-${{ github.run_id }}.apk"
           cp "$SRC" "$OUT"
-          echo "TAG=apk-${OUT%.apk}-${{ github.run_id }}" >> $GITHUB_ENV
+          echo "TAG=apk-${OUT%.apk}" >> $GITHUB_ENV
           echo "OUT_APK=$OUT" >> $GITHUB_ENV
 
       - uses: softprops/action-gh-release@v2
@@ -91,7 +93,7 @@ jobs:
           curl -sS -X POST "$API/api/build-status" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${BUILD_TOKEN}" \
-            -d "{\"appId\":\"${BUILD_APP_ID}\",\"status\":\"ready\",\"apkUrl\":\"${apkUrl}\"}" || true
+            -d "{\"appId\":\"${BUILD_APP_ID}\",\"status\":\"ready\",\"apkUrl\":\"${apkUrl}\",\"version\":\"1.0.${BUILD_TS}\"}" || true
 
       - name: Notificar falla
         if: failure()
